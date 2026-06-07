@@ -1,7 +1,7 @@
 import { useState, useEffect, useReducer } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
-import { Button } from "../ui";
+import { Button, Input } from "../ui";
 import {
   SpinnerIcon,
   CheckIcon,
@@ -9,12 +9,17 @@ import {
   CodexIcon,
   OpenCodeIcon,
   OllamaIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  AiChatIcon,
 } from "../icons";
 import { AI_PROVIDER_ORDER, type AiProvider } from "../../services/ai";
 import * as aiService from "../../services/ai";
 import { mod } from "../../lib/platform";
 import * as cliService from "../../services/cli";
 import type { CliStatus } from "../../services/cli";
+import { getSettings, updateSettings } from "../../services/notes";
+import type { ChatboxSettings } from "../../types/note";
 
 type CliState = {
   status: CliStatus | null;
@@ -50,6 +55,147 @@ function cliReducer(state: CliState, action: CliAction): CliState {
     case "operate_failed":
       return { ...state, operating: false };
   }
+}
+
+// Collapsible Chatbox Settings Section
+function ChatboxSettingsSection() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load current settings
+  useEffect(() => {
+    getSettings()
+      .then((settings) => {
+        if (settings.chatbox) {
+          setApiKey(settings.chatbox.openRouterApiKey || "");
+          setSelectedModel(settings.chatbox.model || "");
+        }
+        setIsLoaded(true);
+      })
+      .catch(() => setIsLoaded(true));
+  }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const settings = await getSettings();
+      const chatboxSettings: ChatboxSettings = {
+        openRouterApiKey: apiKey.trim() || undefined,
+        model: selectedModel || undefined,
+      };
+      await updateSettings({
+        ...settings,
+        chatbox: chatboxSettings,
+      });
+      toast.success("Chatbox settings saved");
+    } catch (err) {
+      toast.error("Failed to save settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center gap-2 p-3">
+        <SpinnerIcon className="w-4 h-4 animate-spin text-text-muted" />
+        <span className="text-sm text-text-muted">Loading settings...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-border rounded-[10px] overflow-hidden">
+      {/* Header - always visible */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-4 hover:bg-bg-muted transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <AiChatIcon className="w-5 h-5 stroke-[1.5] text-text-muted" />
+          <div className="text-left">
+            <div className="text-sm font-medium">Chatbox</div>
+            <div className="text-xs text-text-muted">
+              AI chat powered by OpenRouter
+            </div>
+          </div>
+        </div>
+        {isOpen ? (
+          <ChevronDownIcon className="w-4 h-4 text-text-muted" />
+        ) : (
+          <ChevronRightIcon className="w-4 h-4 text-text-muted" />
+        )}
+      </button>
+
+      {/* Collapsible content */}
+      {isOpen && (
+        <div className="px-4 pb-4 space-y-4 border-t border-border">
+          <p className="text-sm text-text-muted pt-3">
+            Configure the AI chatbox to chat with your notes. Get your API key
+            from{" "}
+            <a
+              href="https://openrouter.ai/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:underline"
+            >
+              openrouter.ai/keys
+            </a>
+          </p>
+
+          {/* API Key */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">OpenRouter API Key</label>
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-or-v1-..."
+                className="flex-1 font-mono text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Model Selection */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Model ID</label>
+            <Input
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              placeholder="e.g., anthropic/claude-3.5-sonnet"
+              className="font-mono text-xs"
+            />
+            <p className="text-xs text-text-muted">
+              Model IDs can be found at{" "}
+              <a
+                href="https://openrouter.ai/models"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                openrouter.ai/models
+              </a>
+            </p>
+          </div>
+
+          <Button onClick={handleSave} disabled={isSaving} variant="outline" size="md">
+            {isSaving ? (
+              <>
+                <SpinnerIcon className="w-3.25 h-3.25 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Settings"
+            )}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CliUsageHint() {
@@ -151,8 +297,16 @@ export function ToolsSettingsSection() {
 
   return (
     <div className="space-y-8 py-8">
+      {/* Chatbox Settings */}
+      <section>
+        <h2 className="text-xl font-medium mb-4">Chatbox</h2>
+        <ChatboxSettingsSection />
+      </section>
+
+      <div className="border-t border-border" />
+
       {/* AI Providers */}
-      <section className="pb-2">
+      <section className="pb-2 pt-4">
         <h2 className="text-xl font-medium mb-0.5">AI Providers</h2>
         <p className="text-sm text-text-muted mb-4">
           Edit notes with AI from the command palette ({mod}P while editing a

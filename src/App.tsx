@@ -20,6 +20,7 @@ import {
 } from "./components/icons";
 import { AiEditModal } from "./components/ai/AiEditModal";
 import { AiResponseToast } from "./components/ai/AiResponseToast";
+import { AiChatbox } from "./components/chatbox/AiChatbox";
 import { KeyboardShortcutsModal } from "./components/shortcuts/KeyboardShortcutsModal";
 import { PreviewApp } from "./components/preview/PreviewApp";
 import {
@@ -74,6 +75,7 @@ function AppContent() {
   const [aiEditing, setAiEditing] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [aiProvider, setAiProvider] = useState<AiProvider>("claude");
+  const [chatboxOpen, setChatboxOpen] = useState(false);
   const editorRef = useRef<TiptapEditor | null>(null);
 
   // Listen for set-notes-folder event from CLI (scratch .)
@@ -109,6 +111,10 @@ function AppContent() {
       return !prev;
     });
   }, [selectedNoteId]);
+
+  const toggleChatbox = useCallback(() => {
+    setChatboxOpen((prev) => !prev);
+  }, []);
 
   const toggleSettings = useCallback(() => {
     setView((prev) => (prev === "settings" ? "notes" : "settings"));
@@ -483,7 +489,9 @@ function AppContent() {
               onEditorReady={(editor) => {
                 editorRef.current = editor;
               }}
+              onToggleChatbox={toggleChatbox}
             />
+            <AiChatbox isOpen={chatboxOpen} onClose={toggleChatbox} />
           </>
         )}
       </div>

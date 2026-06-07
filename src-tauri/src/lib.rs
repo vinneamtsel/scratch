@@ -132,6 +132,25 @@ pub struct Settings {
     pub custom_colors_light: Option<std::collections::HashMap<String, String>>,
     #[serde(rename = "customColorsDark")]
     pub custom_colors_dark: Option<std::collections::HashMap<String, String>>,
+    pub chatbox: Option<ChatboxSettings>,
+}
+
+// Chatbox settings (no messages - stored separately)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatboxSettings {
+    pub open_router_api_key: Option<String>,
+    pub model: Option<String>,
+}
+
+// Chat message for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMessage {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    pub timestamp: i64,
 }
 
 // Search result
@@ -1788,6 +1807,121 @@ fn update_git_enabled(
 
     let settings = state.settings.read().expect("settings read lock");
     save_settings(&folder, &settings).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+// Chat history commands - stored in separate chatbox.json file
+#[tauri::command]
+async fn get_chat_history(expected_folder: String, state: State<'_, AppState>) -> Result<std::collections::HashMap<String, Vec<ChatMessage>>, String> {
+    let folder = {
+        let app_config = state.app_config.read().expect("app_config read lock");
+        let folder = app_config.notes_folder.clone().ok_or("Notes folder not set")?;
+
+        if folder != expected_folder {
+            return Err("Notes folder changed".to_string());
+        }
+
+        folder
+    };
+
+    let chat_history_path = PathBuf::from(&folder).join(".scratch").join("chatbox.json");
+
+    if !chat_history_path.exists() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let content = fs::read_to_string(&chat_history_path)
+        .await
+        .map_err(|e| format!("Failed to read chat history: {}", e))?;
+
+    let history: std::collections::HashMap<String, Vec<ChatMessage>> = 
+        serde_json::from_str(&content).unwrap_or_default();
+
+    Ok(history)
+}
+
+#[tauri::command]
+async fn save_chat_history(
+    expected_folder: String,
+    history: std::collections::HashMap<String, Vec<ChatMessage>>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let folder = {
+        let app_config = state.app_config.read().expect("app_config read lock");
+        let folder = app_config.notes_folder.clone().ok_or("Notes folder not set")?;
+
+        if folder != expected_folder {
+            return Err("Notes folder changed".to_string());
+        }
+
+        folder
+    };
+
+    let chatbox_dir = PathBuf::from(&folder).join(".scratch");
+    let chat_history_path = chatbox_dir.join("chatbox.json");
+
+    // Ensure .scratch directory exists
+    fs::create_dir_all(&chatbox_dir)
+        .await
+        .map_err(|e| format!("Failed to create .scratch directory: {}", e))?;
+
+    let content = serde_json::to_string_pretty(&history)
+        .map_err(|e| format!("Failed to serialize chat history: {}", e))?;
+
+    fs::write(&chat_history_path, content)
+        .await
+        .map_err(|e| format!("Failed to write chat history: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_chat_history(
+    expected_folder: String,
+    note_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let folder = {
+        let app_config = state.app_config.read().expect("app_config read lock");
+        let folder = app_config.notes_folder.clone().ok_or("Notes folder not set")?;
+
+        if folder != expected_folder {
+            return Err("Notes folder changed".to_string());
+        }
+
+        folder
+    };
+
+    let chat_history_path = PathBuf::from(&folder).join(".scratch").join("chatbox.json");
+
+    if !chat_history_path.exists() {
+        return Ok(());
+    }
+
+    if let Some(clear_note_id) = note_id {
+        // Clear history for specific note
+        let content = fs::read_to_string(&chat_history_path)
+            .await
+            .map_err(|e| format!("Failed to read chat history: {}", e))?;
+
+        let mut history: std::collections::HashMap<String, Vec<ChatMessage>> = 
+            serde_json::from_str(&content).unwrap_or_default();
+
+        history.remove(&clear_note_id);
+
+        let updated = serde_json::to_string_pretty(&history)
+            .map_err(|e| format!("Failed to serialize chat history: {}", e))?;
+
+        fs::write(&chat_history_path, updated)
+            .await
+            .map_err(|e| format!("Failed to write chat history: {}", e))?;
+    } else {
+        // Clear all history
+        fs::write(&chat_history_path, "{}")
+            .await
+            .map_err(|e| format!("Failed to clear chat history: {}", e))?;
+    }
 
     Ok(())
 }
@@ -3825,6 +3959,9 @@ pub fn run() {
             update_git_enabled,
             preview_note_name,
             write_file,
+            get_chat_history,
+            save_chat_history,
+            clear_chat_history,
             search_notes,
             start_file_watcher,
             rebuild_search_index,

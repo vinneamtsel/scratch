@@ -72,6 +72,7 @@ import { ScratchBlockMath, normalizeBlockMath } from "./MathExtensions";
 import { cn } from "../../lib/utils";
 import { plainTextFromMarkdown } from "../../lib/plainText";
 import { Button, IconButton, ToolbarButton, Tooltip } from "../ui";
+import { AiChatIcon } from "../icons";
 import * as notesService from "../../services/notes";
 import { downloadPdf, downloadMarkdown } from "../../services/pdf";
 import type { Settings } from "../../types/note";
@@ -447,6 +448,7 @@ interface EditorProps {
   onEditorReady?: (editor: TiptapEditor | null) => void;
   onSaveToFolder?: () => void;
   saveToFolderDisabled?: boolean;
+  onToggleChatbox?: () => void;
 }
 
 /**
@@ -510,6 +512,7 @@ export function Editor({
   previewMode,
   onSaveToFolder,
   saveToFolderDisabled,
+  onToggleChatbox,
 }: EditorProps) {
   // Always call the hook (rules of hooks), but it returns null outside NotesProvider
   const notesCtx = useOptionalNotes();
@@ -2190,6 +2193,13 @@ export function Editor({
         <div
           className={`titlebar-no-drag flex items-center gap-px shrink-0 transition-opacity duration-400 ${needsSidebarDelay ? "delay-200" : ""} ${focusMode ? "opacity-0 pointer-events-none" : "opacity-100"}`}
         >
+          {onToggleChatbox && (
+            <Tooltip content="Chat with note">
+              <IconButton onClick={onToggleChatbox}>
+                <AiChatIcon className="w-4.5 h-4.5 stroke-[1.5]" />
+              </IconButton>
+            </Tooltip>
+          )}
           {hasExternalChanges ? (
             <Tooltip
               content={`External changes detected (${mod}${isMac ? "" : "+"}R to refresh)`}

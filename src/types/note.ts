@@ -59,6 +59,13 @@ export interface Settings {
   ignoredPatterns?: string[];
   customColorsLight?: CustomColors;
   customColorsDark?: CustomColors;
+  // Chatbox settings for OpenRouter integration
+  chatbox?: ChatboxSettings;
+}
+
+export interface ChatboxSettings {
+  openRouterApiKey?: string;
+  model?: string;
 }
 
 export interface FolderNode {
